@@ -115,4 +115,5 @@ void Cloner::getborder(const string & f)
 		bordervec.push_back(Point(x, y));
 		//cout << x << " " << y << endl;
 	}
+	freopen("CON", "r", stdin);
 }

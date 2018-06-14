@@ -46,10 +46,7 @@ private:
 	Coord ** coords=nullptr;
 	vector<Iface> faces;
 
-	vector<vector<Point> > meshvec;//the first three points are the face's
-
-	vector<Vec3f> borderrgb;
-	vector<Vec3f > tarborderrgb;
+	
 protected:
 	Point ToTarget(const Point& p)
 	{
@@ -58,6 +55,24 @@ protected:
 	bool IsValid(const Point & p)
 	{
 		return p.x >= 0 && p.x < sw && p.y >= 0 && p.y < sh;
+	}
+	bool isnan(double d)
+	{
+		return (!(d > 1) && !(d < 2));
+	}
+	void checknum(double d)
+	{
+		if (isnan(d))
+		{
+			cout << "nan:" << d << endl;
+		}
+	}
+	void checknum(const Vec3f v)
+	{
+		for (int i = 0; i < 3; i++)
+		{
+			checknum(v.val[i]);
+		}
 	}
 	vector<double > Getlambda(Point p, const vector<Point> & curve)
 	{
@@ -109,10 +124,10 @@ protected:
 			}
 
 			double cosine = abs(((dx1*dx2) + (dy1*dy2)) / (len1*len2));
+			cosine = cosine > 1 ? 1 : cosine;
 			double tet = acos(cosine);
 			double tana2 = tan(tet / 2);
 			lambda[i] +=  tana2 / len1;
-
 			lambda[i2] +=  tana2 / len2;
 		}
 		//normalize
@@ -125,6 +140,7 @@ protected:
 		{
 			lambda[i] /= sum;
 		}
+		
 		return lambda;
 	}
 	vector<double >	Getlambda(Point p, const Iface& face)
@@ -230,40 +246,7 @@ protected:
 			}
 		}
 	}
-	
-	void SaveMesh(const string &f)
-	{
-		cerr << "saving mesh!" << endl;
-		freopen(f.c_str(), "w", stdout);
-		for (auto face : meshvec)
-		{
-			cout << face.size() << endl;
-			for (auto e : face)
-			{
-				cout << e.x << " " << e.y << " ";
-			}
-			cout << endl;
-		}
-		freopen("CON", "w", stdout);
-	}
-	void LoadMesh(const string &f)
-	{
-		cerr << "Load mesh£¡" << endl;
-		freopen(f.c_str(), "r", stdin);
-		int size = 0;
-		while (scanf("%d", &size) != EOF)
-		{
-			vector<Point> tmp;
-			int xtmp, ytmp;
-			for (int i = 0; i < size; i++)
-			{
-				cin >> xtmp;
-				cin >> ytmp;
-				tmp.push_back(Point(xtmp, ytmp));
-			}
-			meshvec.push_back(tmp);
-		}
-	}
+
 	void LoadCoord(const string &f)
 	{
 		cerr << "loading coord!" << endl;
@@ -291,7 +274,10 @@ protected:
 			}
 		}
 	}
-
+	Vec3f GetVec(const Point &p1, const Point &p2)
+	{
+		return Vec3f(p2.x - p1.x, p2.y - p1.y,0);
+	}
 public:
 
 	Cloner();
@@ -374,7 +360,6 @@ public:
 	void getcoord(const string & f)
 	{
 		cerr << "getcoord!" << endl;
-		Mat floodmat(sh, sw, CV_32FC3, Scalar(0, 0, 0));
 		//0 get all the finite faces
 		for (auto it = cdt.all_faces_begin(); it != cdt.all_faces_end(); it++)
 		{
@@ -398,17 +383,7 @@ public:
 			}
 			faces.push_back(ftmp);
 		}
-		//1 get all the points and the egdes on the flood mat
-		for (auto face : faces)
-		{
-			for (int i = 0; i < 3; i++)
-			{
-				line(floodmat, face.p[i], face.p[(i + 1) % 3], FLOODBORDER);
-			}
-		}
-		//2 flood outside
-		Floodfill(Point(0, 0), floodmat);
-		//3 flood to get the lambda
+		
 		//3.1 get coords of the mesh points
 		for (auto face : faces)
 		{
@@ -421,106 +396,9 @@ public:
 				}
 			}
 		}
-		//3.2 get coords of the inerpoints
-		vector<Point> border;
-		vector<Point> inerpoints;
-		for (int x = 0; x < sw; x++)
-		{
-			for (int y = 0; y < sh; y++)
-			{
-				border.clear();
-				inerpoints.clear();
-				Floodfill(Point(x, y), floodmat, border, inerpoints);
-				if (!inerpoints.empty())
-				{
-					//1 find the face the points belong to
-					Point leader;
-					Iface fleader;
-					
-					leader = inerpoints[0];
-					for (auto face : faces)
-					{
-						if (isintriangle(leader, face))
-						{
-							fleader = face;
-							break;
-						}
-					}
-					//2 get the mesh
-					vector<Point >tmp;
-					for (int i = 0; i < 3; i++)
-					{
-						tmp.push_back(fleader.p[i]);
-					}
-					for (auto p : inerpoints)
-					{
-						tmp.push_back(p);
-					}
-					for (auto p : border)
-					{
-						tmp.push_back(p);
-					}
-					meshvec.push_back(tmp);
-					//else {//border is not empty
-					//	cout << "border to find fleader,unconcerned!" << endl;
-					//	continue;
-					//}
-					////2 get the lamba of the inerpoints
-					//for (auto e : inerpoints)
-					//{
-					//	vector<double> tmp = Getlambda(e, fleader);
-					//	vector<double> &co = coords[e.y][e.x].lambda;
-					//	Point *p = fleader.p;
-					//	co = coords[p[0].y][p[0].x].lambda;
-					//	for (int i = 0; i < co.size(); i++)
-					//	{
-					//		co[i] *= tmp[0];
-					//		for (int j = 1; j < 3; j++)
-					//		{
-					//			co[i] += tmp[j] * coords[p[j].y][p[j].x].lambda[i];
-					//		}
-					//	}
-					//}
-					////3 get the lamba of the borderpoints
-					//for (auto e : border)
-					//{
-					//	vector<double> tmp = Getlambda(e, fleader);
-					//	vector<double> &co = coords[e.y][e.x].lambda;
-					//	Point *p = fleader.p;
-					//	co = coords[p[0].y][p[0].x].lambda;
-					//	for (int i = 0; i < co.size(); i++)
-					//	{
-					//		co[i] *= tmp[0];
-					//		for (int j = 1; j < 3; j++)
-					//		{
-					//			co[i] += tmp[j] * coords[p[j].y][p[j].x].lambda[i];
-					//		}
-					//	}
-					//}
-				}
-			}
-		}
-		//4 get all the special points
-		for (int x = 0; x < sw; x++)
-		{
-			for (int y = 0; y < sh; y++)
-			{
-				if (GetRGB(floodmat, x, y) == FLOODBORDER)
-				{
-					coords[y][x].lambda = Getlambda(Point(x,y), bordervec);
-				}
-			}
-		}
 		//save
 		//SaveCoord(f, bordervec.size());
-		//SaveMesh(f + "-mesh");
-		namedWindow("Flood");
-		imshow("Flood", floodmat);
-		waitKey();
-	}
-	void loadcoord(const string &f) {
-		LoadCoord(f);
-		LoadMesh(f + "-mesh");
+
 	}
 	void showtarget()
 	{
@@ -528,12 +406,18 @@ public:
 		imshow("target", tar);
 		waitKey();
 	}
-
+	void showres()
+	{
+		namedWindow("res");
+		imshow("res", res);
+		waitKey();
+	}
 	void clone()
 	{
 		//0 get membrane mat
 		//prepare the res
 		tar.copyTo(res);
+		Mat check;
 		Mat membrane;
 		src.copyTo(membrane);
 		for (int i = 0; i < sw; i++)
@@ -543,61 +427,77 @@ public:
 				PutXY(membrane, i, j, BLACK);
 			}
 		}
-		//1 get the rgb of the border of the target
-		for (auto p:bordervec)
+		membrane.copyTo(check);
+		vector<Vec3f >diff;
+		for (int i = 0; i < bordervec.size(); i++)
 		{
-			tarborderrgb.push_back(GetRGB(tar, ToTarget(p)));
-		}
-		for (auto p : bordervec)
-		{
-			borderrgb.push_back(GetRGB(src, p));
+			diff.push_back(GetRGB(tar, ToTarget(bordervec[i])) - GetRGB(src, bordervec[i]));
 		}
 		//2 get the rgb of the meshpoint of the source
-		for (auto face:meshvec)
+		for (auto face : faces)
 		{
-			vector<Point> p;
+			Point *p = face.p;
+			//0 put all the mesh points
 			for (int i = 0; i < 3; i++)
 			{
-				p.push_back(face[i]);
 				vector<double> &lambda = coords[p[i].y][p[i].x].lambda;
-				//cerr << "size:" << lambda.size() << " " << tarborderrgb.size() << endl;
 				Vec3f rgb(BLACK);
 				for (int j = 0; j < lambda.size(); j++)
 				{
-					rgb += lambda[j] * (tarborderrgb[j]-borderrgb[j]);
+					rgb += lambda[j] * (diff[j]);
 				}
-				PutXY(membrane,p[i], rgb);
+				PutXY(membrane, p[i], rgb);
+				PutXY(check, p[i], RED);
 			}
-			//3 get the rgb of the other points of the source
-			for (int i = 3; i < face.size(); i++)
+			//next->iner polatino
+			//1 max edge
+			double edge = 0;
+			for (int i = 0; i < 3; i++)
 			{
-				Point &pp = face[i];
-				//if (GetRGB(membrane, pp) != BLACK) continue;
-				vector<double> lambda = Getlambda(pp, p);
-				Vec3f rgb(BLACK);
-				for (int j = 0; j < lambda.size(); j++)
+				Vec2f dis = Vec2f(p[(i + 1) % 3].x - p[i].x, p[(i + 1) % 3].y - p[i].y);
+				double tmp = dis.dot(dis);
+				if (tmp > edge)
 				{
-					rgb += lambda[j] * GetRGB(membrane, p[j]);
+					edge = tmp;
 				}
-				//PutXY(tar, ToTarget(pp), rgb + GetRGB(src, pp));
-				PutXY(membrane, pp, rgb );
 			}
-		}
-
-		//4 get the special points rgbs
-		for (int x = 0; x < sw; x++)
-		{
-			for (int y = 0; y < sh; y++)
+			edge = sqrt(edge);
+			//2 traverse
+			double delta = .5 / edge;
+			for (double i = 0; i<=1; i += delta)
 			{
-				if (GetRGB(membrane, x, y) == BLACK && coords[y][x].isValid())
+				for (double j = 0; j<=1 - i; j += delta)
 				{
-					vector<double> &lambda = coords[y][x].lambda;
-					Vec3f rgb(BLACK);
-					for (int j = 0; j < lambda.size(); j++)
+					int x = i * p[0].x + j * p[1].x + (1 - i - j)*p[2].x;
+					int y = i * p[0].y + j * p[1].y + (1 - i - j)*p[2].y;
+					if (GetRGB(membrane, x, y) == BLACK)
 					{
-						rgb += lambda[j] * (tarborderrgb[j] - borderrgb[j]);
+						//3 get interpolation
+						Vec3f o[3];
+						for (int i = 0; i < 3; i++)
+						{
+							o[i] = GetVec(p[(i + 1) % 3], p[(i + 2) % 3]);
+						}
+						double S[3];
+						for (int i = 0; i < 3; i++)
+						{
+							Vec3f tmp = o[i].cross(GetVec(p[(i + 1) % 3], Point(x, y)));
+							S[i] = sqrt(tmp.dot(tmp))/2;
+						}
+						double ALLS = 0;
+						for (int i = 0; i < 3; i++)
+						{
+							ALLS += S[i];
+						}
+						Vec3f rgb(BLACK);
+						for (int i = 0; i < 3; i++)
+						{
+							rgb += S[i] / ALLS * GetRGB(membrane, p[i]);
+						}
+					
+						PutXY(membrane, Point(x, y), rgb);
+						PutXY(check, Point(x,y), RED);
 					}
-					PutXY(membrane, x,y, rgb);
 				}
 			}
 		}
@@ -607,14 +507,47 @@ public:
 			for (int y = 0; y < sh; y++)
 			{
 				Vec3f mc = GetRGB(membrane, x, y);
-				if(mc!=BLACK||coords[y][x].isValid())
+				if(GetRGB(check,x,y)!=BLACK)
 				PutXY(tar, ToTarget(Point(x,y)), mc+GetRGB(src,x,y));
 			}
 		}
-		namedWindow("membrane");
-		imshow("membrane", membrane);
+		res.copyTo(membrane);
+		tar.copyTo(res);
+		membrane.copyTo(tar);
+	}
+
+	void showorigin()
+	{
+		cerr << "show org" << endl;
+		Mat org;
+		tar.copyTo(org);
+		for (int x = 0; x < sw; x++)
+		{
+			for (int y = 0; y < sh; y++)
+			{
+				PutXY(org, ToTarget(Point(x,y)), GetRGB(src,x,y));
+			}
+		}
+		namedWindow("org");
+		imshow("org", org);
 		waitKey();
-		
+	}
+	void showmeshinres()
+	{
+		cerr << "show res" << endl;
+		Mat meshinres;
+		res.copyTo(meshinres);
+		for (auto face : faces)
+		{
+			Point *p = face.p;
+			for (int i = 0; i < 3; i++)
+			{
+				line(meshinres, ToTarget(p[i]), ToTarget(p[(i + 1) % 3]), RED);
+			}
+		}
+		namedWindow("meshinres");
+		imshow("meshinres", meshinres);
+		waitKey();
 	}
 };
 
